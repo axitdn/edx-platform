@@ -143,7 +143,7 @@ class CourseRerunUIStateManager(CourseActionUIStateManager):
         self.update_state(
             course_key=course_key,
             new_state=self.State.FAILED,
-            message=traceback.format_exc(),
+            message=traceback.format_exc()[-1000:],  # truncate to fit CHAR(1000)
         )
 
 
