@@ -14,5 +14,3 @@ January, 2015
      - Change
    * - 1/29/15
      - Added the :ref:`Get or Change User Status in a Course` section.
-   * - 
-     - 
