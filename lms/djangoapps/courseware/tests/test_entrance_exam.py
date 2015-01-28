@@ -5,7 +5,7 @@ from django.test.client import RequestFactory
 from django.test.utils import override_settings
 
 from courseware.model_data import FieldDataCache
-from courseware.module_render import get_module, toc_for_course
+from courseware.module_render import get_module, toc_for_course, override_with_required_content
 from courseware.tests.factories import UserFactory
 from milestones import api as milestones_api
 from milestones.models import MilestoneRelationshipType
@@ -31,12 +31,12 @@ class EntranceExamTestCases(ModuleStoreTestCase):
                 'entrance_exam_enabled': True,
             }
         )
-        chapter = ItemFactory.create(
+        self.chapter = ItemFactory.create(
             parent=self.course,
             display_name='Overview'
         )
         ItemFactory.create(
-            parent=chapter,
+            parent=self.chapter,
             display_name='Welcome'
         )
         ItemFactory.create(
@@ -44,8 +44,8 @@ class EntranceExamTestCases(ModuleStoreTestCase):
             category='chapter',
             display_name="Week 1"
         )
-        ItemFactory.create(
-            parent=chapter,
+        self.chapter_subsection = ItemFactory.create(
+            parent=self.chapter,
             category='sequential',
             display_name="Lesson 1"
         )
@@ -58,7 +58,9 @@ class EntranceExamTestCases(ModuleStoreTestCase):
         self.entrance_exam = ItemFactory.create(
             parent=self.course,
             category="chapter",
-            display_name="Entrance Exam Section - Chapter 1"
+            display_name="Entrance Exam Section - Chapter 1",
+            is_entrance_exam=True,
+            in_entrance_exam=True
         )
         self.exam_1 = ItemFactory.create(
             parent=self.entrance_exam,
@@ -124,12 +126,38 @@ class EntranceExamTestCases(ModuleStoreTestCase):
             user,
             self.entrance_exam
         )
-        self.entrance_exam.is_entrance_exam = True
-        self.entrance_exam.in_entrance_exam = True
         self.course.entrance_exam_enabled = True
         self.course.entrance_exam_minimum_score_pct = 0.50
         self.course.entrance_exam_id = unicode(self.entrance_exam.scope_ids.usage_id)
         modulestore().update_item(self.course, user.id)  # pylint: disable=no-member
+
+    def test_overriding_chapter_with_required_content_module(self):
+        """
+        Unit Test: if entrance exam is required then show its content e.g. chapter, sub-section.
+        """
+        field_data_cache = FieldDataCache.cache_for_descriptor_descendents(
+            self.course.id,
+            self.request.user,
+            self.course,
+            depth=2
+        )
+        # pylint: disable=protected-access
+        course_module = get_module(
+            self.request.user,
+            self.request,
+            self.course.scope_ids.usage_id,
+            field_data_cache,
+        )._xmodule
+
+        chapter, section = override_with_required_content(
+            course_module=course_module,
+            course=self.course,
+            user=self.request.user,
+            active_chapter=self.chapter.url_name,
+            active_section=self.chapter_subsection.url_name
+        )
+        self.assertEqual(chapter, self.entrance_exam.url_name)
+        self.assertEqual(section, self.exam_1.url_name)
 
     def test_entrance_exam_gating(self):
         """
