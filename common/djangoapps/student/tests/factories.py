@@ -41,6 +41,7 @@ class UserProfileFactory(DjangoModelFactory):
     gender = u'm'
     mailing_address = None
     goals = u'World domination'
+    language = u'en'
 
 
 class CourseModeFactory(DjangoModelFactory):

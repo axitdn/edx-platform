@@ -258,7 +258,6 @@ def single_thread(request, course_key, discussion_id, thread_id):
     """
     Renders a response to display a single discussion thread.
     """
-
     nr_transaction = newrelic.agent.current_transaction()
 
     course = get_course_with_access(request.user, 'load_forum', course_key)
@@ -266,6 +265,11 @@ def single_thread(request, course_key, discussion_id, thread_id):
     cc_user = cc.User.from_django_user(request.user)
     user_info = cc_user.to_dict()
     is_moderator = cached_has_permission(request.user, "see_all_cohorts", course_key)
+
+    # Verify that student has access to this thread if belongs to a discussion module
+    if discussion_id not in course.top_level_discussion_topic_ids and \
+            discussion_id not in [module.discussion_id for module in utils.get_accessible_discussion_modules(course, request.user)]:
+        raise Http404
 
     # Currently, the front end always loads responses via AJAX, even for this
     # page; it would be a nice optimization to avoid that extra round trip to

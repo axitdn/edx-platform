@@ -60,7 +60,7 @@ def has_forum_access(uname, course_id, rolename):
     return role.users.filter(username=uname).exists()
 
 
-def _get_discussion_modules(course, user):
+def get_accessible_discussion_modules(course, user):
     all_modules = modulestore().get_items(course.id, qualifiers={'category': 'discussion'})
 
     def has_required_keys(module):
@@ -83,7 +83,7 @@ def get_discussion_id_map(course, user):
         last_category = module.discussion_category.split("/")[-1].strip()
         return (discussion_id, {"location": module.location, "title": last_category + " / " + title})
 
-    return dict(map(get_entry, _get_discussion_modules(course, user)))
+    return dict(map(get_entry, get_accessible_discussion_modules(course, user)))
 
 
 def _filter_unstarted_categories(category_map):
@@ -139,7 +139,7 @@ def _sort_map_entries(category_map, sort_alpha):
 def get_discussion_category_map(course, user):
     unexpanded_category_map = defaultdict(list)
 
-    modules = _get_discussion_modules(course, user)
+    modules = get_accessible_discussion_modules(course, user)
 
     is_course_cohorted = course.is_cohorted
     cohorted_discussion_ids = course.cohorted_discussions
