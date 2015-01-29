@@ -6,10 +6,11 @@ returns the i4x://org/course/cat/name@draft object if that exists,
 and otherwise returns i4x://org/course/cat/name).
 """
 
-import pymongo
 import logging
 
+import pymongo
 from opaque_keys.edx.locations import Location
+from opaque_keys.edx.locator import BlockUsageLocator
 from xmodule.exceptions import InvalidVersionError
 from xmodule.modulestore import ModuleStoreEnum
 from xmodule.modulestore.exceptions import (
@@ -20,6 +21,7 @@ from xmodule.modulestore.mongo.base import (
 )
 from xmodule.modulestore.store_utilities import rewrite_nonportable_content_links
 from xmodule.modulestore.draft_and_published import UnsupportedRevisionError, DIRECT_ONLY_CATEGORIES
+
 
 log = logging.getLogger(__name__)
 
@@ -46,6 +48,7 @@ class DraftModuleStore(MongoModuleStore):
     This module also includes functionality to promote DRAFT modules (and their children)
     to published modules.
     """
+
     def get_item(self, usage_key, depth=0, revision=None, **kwargs):
         """
         Returns an XModuleDescriptor instance for the item at usage_key.
@@ -76,6 +79,7 @@ class DraftModuleStore(MongoModuleStore):
             xmodule.modulestore.exceptions.ItemNotFoundError if no object
             is found at that usage_key
         """
+
         def get_published():
             return wrap_draft(super(DraftModuleStore, self).get_item(usage_key, depth=depth))
 
@@ -122,6 +126,7 @@ class DraftModuleStore(MongoModuleStore):
                     if branch setting is ModuleStoreEnum.Branch.published_only, checks for the published item only
                     if branch setting is ModuleStoreEnum.Branch.draft_preferred, checks whether draft or published item exists
         """
+
         def has_published():
             return super(DraftModuleStore, self).has_item(usage_key)
 
@@ -332,6 +337,7 @@ class DraftModuleStore(MongoModuleStore):
                     if the branch setting is ModuleStoreEnum.Branch.draft_preferred,
                         returns either Draft or Published, preferring Draft items.
         """
+
         def base_get_items(key_revision):
             return super(DraftModuleStore, self).get_items(course_key, key_revision=key_revision, **kwargs)
 
@@ -508,7 +514,7 @@ class DraftModuleStore(MongoModuleStore):
                 draft_parent = self.convert_to_draft(parent_locations[0], user_id)
                 parent_locations = [draft_parent.location]
         # there could be 2 parents if
-        #   Case 1: the draft item moved from one parent to another
+        # Case 1: the draft item moved from one parent to another
         #   Case 2: revision==ModuleStoreEnum.RevisionOption.all and the single parent has 2 versions: draft and published
         for parent_location in parent_locations:
             # don't remove from direct_only parent if other versions of this still exists (this code
@@ -683,7 +689,7 @@ class DraftModuleStore(MongoModuleStore):
             if item.has_children:
                 if original_published is not None:
                     # see if previously published children were deleted. 2 reasons for children lists to differ:
-                    #   Case 1: child deleted
+                    # Case 1: child deleted
                     #   Case 2: child moved
                     for orig_child in original_published.children:
                         if orig_child not in item.children:
@@ -829,6 +835,47 @@ class DraftModuleStore(MongoModuleStore):
                 expected_setting=expected_branch_setting,
                 actual_setting=actual_branch_setting
             )
+
+    def _format_course_structure(self, course_key, structure):
+        course_block_key = unicode(BlockUsageLocator(course_key, 'course', course_key.run))
+        structure[course_block_key] = {
+            u'display_name': self.get_course(course_key).display_name,
+            u'children': []
+        }
+
+        for key, block in structure.iteritems():
+            # Set block_type attribute using the locator key
+            block_locator = BlockUsageLocator.from_string(key)
+            block[u'block_type'] = block_locator.block_type
+
+            # Ensure all required fields have values
+            block[u'display_name'] = block.get(u'display_name', None)
+            block[u'format'] = block.get(u'format', None)
+            block[u'graded'] = block.get(u'graded', False)
+
+            # Create a link from the parent to this block and remove this block's link to the parent.
+            parent = block.pop(u'parent', {})
+            parent_key = parent.get(ModuleStoreEnum.Branch.published_only) \
+                         or parent.get(ModuleStoreEnum.Branch.draft_preferred)
+            if parent_key:
+                children = structure[parent_key].get(u'children', [])
+                children.append(key)
+                structure[parent_key][u'children'] = children
+
+            # Remove the extraneous fields
+            extraneous_keys = set(block.keys()) - set(self.REQUIRED_COURSE_STRUCTURE_KEYS)
+            for extraneous_key in extraneous_keys:
+                del block[extraneous_key]
+
+        return {
+            u'root': course_block_key,
+            u'blocks': structure
+        }
+
+    def get_course_structure(self, course_id, version=None):    # pylint: disable=unused-argument
+        structure = self._get_cached_metadata_inheritance_tree(course_id, force_refresh=True)
+        structure = self._format_course_structure(course_id, structure)
+        return structure
 
 
 def _verify_revision_is_published(location):

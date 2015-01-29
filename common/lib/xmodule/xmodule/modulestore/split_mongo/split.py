@@ -3015,6 +3015,49 @@ class SplitMongoModuleStore(SplitBulkWriteMixin, ModuleStoreWriteBase):
         """
         self.db_connection.ensure_indexes()
 
+    def _get_block_usage_locator(self, course_key, block_key):
+        return BlockUsageLocator(course_key, block_key.type, block_key.id)
+
+    def _format_course_structure(self, course_key, structure):
+        # Convert the root key to a locator string
+        structure[u'root'] = unicode(self._get_block_usage_locator(course_key, structure[u'root']))
+
+        for key in structure[u'blocks'].keys():
+            block = structure[u'blocks'][key]
+
+            # Promote children and display_name fields from nested fields dict
+            fields = block.pop(u'fields', {})
+            block[u'display_name'] = fields.get(u'display_name', None)
+            block[u'format'] = fields.get(u'format', None)
+            block[u'graded'] = fields.get(u'graded', False)
+
+            children = fields.get(u'children', [])
+            block[u'children'] = [unicode(self._get_block_usage_locator(course_key, child)) for child in children]
+
+            # Remove the extraneous fields
+            block = dict((key, block[key]) for key in self.REQUIRED_COURSE_STRUCTURE_KEYS)
+
+            # Change the key to a locator string
+            del structure[u'blocks'][key]
+            locator = unicode(self._get_block_usage_locator(course_key, key))
+            structure[u'blocks'][locator] = block
+
+        # Return only the required fields
+        return {
+            u'root': structure[u'root'],
+            u'blocks': structure[u'blocks']
+        }
+
+    def get_course_structure(self, course_id, version=None):
+        if not version:
+            course_index = self.get_course_index(course_id)
+            versions = course_index[u'versions']
+            version = versions.get(ModuleStoreEnum.BranchName.published) \
+                      or versions.get(ModuleStoreEnum.BranchName.draft)
+
+        structure = self.get_structure(course_id, version)
+        return self._format_course_structure(course_id, structure)
+
 
 class SparseList(list):
     """

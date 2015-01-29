@@ -552,6 +552,8 @@ class ModuleStoreRead(ModuleStoreAssetBase):
 
     __metaclass__ = ABCMeta
 
+    REQUIRED_COURSE_STRUCTURE_KEYS = [u'block_type', u'children', u'display_name', u'format', u'graded']
+
     @abstractmethod
     def has_item(self, usage_key):
         """
@@ -783,6 +785,34 @@ class ModuleStoreRead(ModuleStoreAssetBase):
         """
         pass
 
+    @abstractmethod
+    def get_course_structure(self, course_id, version=None):
+        """
+        Returns a dict representing the course structure.
+
+        Args:
+            course_id (CourseKey):
+            version (string): some modulestores hold different versions of courses. A specific version
+                can be specified; otherwise, the latest published version will be returned.
+
+        The returned dict has the following format:
+        {
+            u'root': u'block-v1:edX+DemoX+2014_T1+type@course+block@course',
+            u'blocks': {
+                u'block-v1:edX+DemoX+2014_T1+type@sequential+block@basic_questions': {
+                u'block_type': u'sequential',
+               u'children': [u'block-v1:edX+DemoX+2014_T1+type@vertical+block@2152d4a4aadc4cb0af5256394a3d1fc7',
+                             u'block-v1:edX+DemoX+2014_T1+type@vertical+block@47dbd5f836544e61877a483c0b75606c',
+                             ...],
+               u'display_name': u'Homework - Question Styles',
+               u'format': u'Homework',
+               u'graded': True},
+               ...
+            }
+        }
+        """
+        pass
+
 
 # pylint: disable=abstract-method
 class ModuleStoreWrite(ModuleStoreRead, ModuleStoreAssetWriteInterface):
@@ -904,9 +934,9 @@ class ModuleStoreWrite(ModuleStoreRead, ModuleStoreAssetWriteInterface):
 
 # pylint: disable=abstract-method
 class ModuleStoreReadBase(BulkOperationsMixin, ModuleStoreRead):
-    '''
+    """
     Implement interface functionality that can be shared.
-    '''
+    """
 
     # pylint: disable=invalid-name
     def __init__(
@@ -920,9 +950,9 @@ class ModuleStoreReadBase(BulkOperationsMixin, ModuleStoreRead):
         # allow lower level init args to pass harmlessly
         ** kwargs
     ):
-        '''
+        """
         Set up the error-tracking logic.
-        '''
+        """
         super(ModuleStoreReadBase, self).__init__(**kwargs)
         self._course_errors = defaultdict(make_error_tracker)  # location -> ErrorLog
         # pylint: disable=fixme
